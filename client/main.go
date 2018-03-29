@@ -76,7 +76,7 @@ func main() {
 			return &tls.Config{InsecureSkipVerify: true}
 		}
 
-		// transfer data between p1(quic side) and p2(tcp side).
+		// transfer data between p1(tcp side) and p2(quic side).
 		transfer := func(p1 io.ReadWriteCloser) {
 			if !config.Quiet {
 				fmt.Println("stream opened")
