@@ -13,7 +13,7 @@ QUIC Server: ./quictun-server-darwin-amd64 -l ":6935" -t "TARGET_IP:1935"
 
 The above commands will establish port forwarding for 1935/tcp as:
 
-> Application -> **QUIC Client(1935/tcp) -> KCP Server(6935/udp)** -> Target Server(1935/tcp) 
+> Application -> **QUIC Client(1935/tcp) -> QUIC Server(6935/udp)** -> Target Server(1935/tcp) 
 
 Tunnels the original connection:
 
