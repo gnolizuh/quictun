@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"time"
 	"log"
-	"fmt"
 	"github.com/urfave/cli"
 	"github.com/marten-seemann/quic-conn"
 	"net"
@@ -55,13 +54,23 @@ func main() {
 		config.Retry = c.Int("retry")
 		config.Quiet = c.Bool("quiet")
 
+		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+		// TODO: how to use TLS config?
+		TLSConfig := func() *tls.Config {
+			return &tls.Config{InsecureSkipVerify: true}
+		}
+
 		addr, err := net.ResolveTCPAddr("tcp", config.LocalAddr)
 		if err != nil {
-			panic(err)
+			log.Println(err)
+			return err
 		}
+
 		listener, err := net.ListenTCP("tcp", addr)
 		if err != nil {
-			panic(err)
+			log.Println(err)
+			return err
 		}
 
 		log.Println("version:", VERSION)
@@ -71,16 +80,11 @@ func main() {
 		log.Println("retry:", config.Retry)
 		log.Println("quiet:", config.Quiet)
 
-		// TODO: how to use TLS config?
-		TLSConfig := func() *tls.Config {
-			return &tls.Config{InsecureSkipVerify: true}
-		}
-
 		// transfer data between p1(tcp side) and p2(quic side).
 		transfer := func(p1 io.ReadWriteCloser) {
 			if !config.Quiet {
-				fmt.Println("stream opened")
-				defer fmt.Println("stream closed")
+				log.Println("stream opened")
+				defer log.Println("stream closed")
 			}
 			defer p1.Close()
 
@@ -112,12 +116,13 @@ func main() {
 		}
 
 		for {
-			p1, err := listener.AcceptTCP()
-			if err != nil {
+			if p1, err := listener.AcceptTCP(); err == nil {
+				log.Printf("accpet tcp addr:%s\n", p1.RemoteAddr())
+
+				go transfer(p1)
+			} else {
 				log.Fatalln(err)
 			}
-
-			go transfer(p1)
 		}
 	}
 	myApp.Run(os.Args)
