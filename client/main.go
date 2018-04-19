@@ -104,10 +104,28 @@ func main() {
 			defer p2.Close()
 
 			p1die := make(chan struct{})
-			go func() { io.Copy(p1, p2); close(p1die) }()
+			go func() {
+				n, err := io.Copy(p1, p2)
+				if err != nil {
+					log.Println(err)
+				}
+
+				log.Printf("<- write %d bytes", n)
+
+				close(p1die)
+			}()
 
 			p2die := make(chan struct{})
-			go func() { io.Copy(p2, p1); close(p2die) }()
+			go func() {
+				n, err := io.Copy(p2, p1)
+				if err != nil {
+					log.Println(err)
+				}
+
+				log.Printf("-> write %d bytes", n)
+
+				close(p2die)
+			}()
 
 			select {
 			case <-p1die:
