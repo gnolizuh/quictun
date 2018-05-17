@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"github.com/urfave/cli"
 	"github.com/marten-seemann/quic-conn"
-	"net"
 	"io"
 	"os"
 )
@@ -22,29 +21,14 @@ var (
 
 func main() {
 	myApp := cli.NewApp()
-	myApp.Name = "quictun"
-	myApp.Usage = "server of QUIC tunnel."
+	myApp.Name = "QUIC echo server"
+	myApp.Usage = "Echo QUIC data immediately."
 	myApp.Version = VERSION
 	myApp.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "listen, l",
 			Value: ":6935",
 			Usage: "server listen address",
-		},
-		cli.StringFlag{
-			Name:  "target, t",
-			Value: "127.0.0.1:1935",
-			Usage: "target server address",
-		},
-		cli.IntFlag{
-			Name:  "timeout",
-			Value: 5,
-			Usage: "max time of waiting a connection to complete",
-		},
-		cli.IntFlag{
-			Name:  "retry",
-			Value: 10,
-			Usage: "max retry time for target connect",
 		},
 		cli.BoolFlag{
 			Name:  "quiet",
@@ -54,14 +38,10 @@ func main() {
 	myApp.Action = func(c *cli.Context) error {
 		config := Config{}
 		config.Listen = c.String("listen")
-		config.Target = c.String("target")
-		config.Timeout = c.Int("timeout")
-		config.Retry = c.Int("retry")
 		config.Quiet = c.Bool("quiet")
 
 		log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-		// TODO: how to use TLS config?
 		TLSConfig := func() *tls.Config {
 			key, err := rsa.GenerateKey(rand.Reader, 2048)
 			if err != nil {
@@ -104,69 +84,29 @@ func main() {
 
 		log.Println("version:", VERSION)
 		log.Println("listening on:", listener.Addr())
-		log.Println("target:", config.Target)
-		log.Println("timeout:", config.Timeout)
-		log.Println("retry:", config.Retry)
 		log.Println("quiet:", config.Quiet)
 
-		// transfer data between p1(quic side) and p2(tcp side).
-		transfer := func(p1 io.ReadWriteCloser) {
+		// echo data from read side to write side.
+		echo := func(p1 io.ReadWriteCloser) {
 			if !config.Quiet {
 				log.Println("stream opened")
 				defer log.Println("stream closed")
 			}
 			defer p1.Close()
 
-			max := config.Retry
-			p2, err := net.DialTimeout("tcp", config.Target, time.Duration(config.Timeout) * time.Second)
-			for err != nil {
+			n, err := io.Copy(p1, p1)
+			if err != nil {
 				log.Println(err)
-				if max <= 0 {
-					p1.Close()
-					return
-				} else {
-					time.Sleep(1 * time.Second)
-					max--
-					p2, err = net.DialTimeout("tcp", config.Target, time.Duration(config.Timeout) * time.Second)
-				}
 			}
-			defer p2.Close()
 
-			p1die := make(chan struct{})
-			go func() {
-				n, err := io.Copy(p1, p2)
-				if err != nil {
-					log.Println(err)
-				}
-
-				log.Printf("<- write %d bytes", n)
-
-				close(p1die)
-			}()
-
-			p2die := make(chan struct{})
-			go func() {
-				n, err := io.Copy(p2, p1)
-				if err != nil {
-					log.Println(err)
-				}
-
-				log.Printf("-> write %d bytes", n)
-
-				close(p2die)
-			}()
-
-			select {
-			case <-p1die:
-			case <-p2die:
-			}
+			log.Printf("echo %d bytes", n)
 		}
 
 		for {
 			if p1, err := listener.Accept(); err == nil {
 				log.Printf("accpet quic addr:%s\n", p1.RemoteAddr())
 
-				go transfer(p1)
+				go echo(p1)
 			} else {
 				log.Fatalln(err)
 			}
